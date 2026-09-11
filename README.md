@@ -79,6 +79,8 @@ xcodebuild test -project Quack.xcodeproj -scheme QuackKitTests
 
 Tool permissions are configurable at the global, server, per-tool, per-session, and per-assistant levels using a three-tier model: **Always Allow**, **Ask**, or **Deny**.
 
+When a session has a working directory, it also acts as a scope: Read File and Write File reject paths outside it, and Run Command runs the shell under a Seatbelt profile that confines writes to that directory. Reads from outside remain possible for shell commands -- a read-confining profile would have to enumerate every library and config file arbitrary tooling touches, and failures there look like the command itself breaking.
+
 ## License
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
