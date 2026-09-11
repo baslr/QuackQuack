@@ -16,7 +16,7 @@ import SwiftUI
 import SwiftData
 import QuackInterface
 
-/// Displays skills toggles and context management settings (compaction threshold, max messages).
+/// Displays skills toggles and context management settings (goal, compaction threshold, max messages).
 struct InspectorContextTab: View {
     @Bindable var session: ChatSession
 
@@ -56,6 +56,14 @@ struct InspectorContextTab: View {
 
     private var contextSection: some View {
         Section("Context Management") {
+            LabeledContent(content: {
+                TextField("", text: goalBinding)
+                    .textFieldStyle(.roundedBorder)
+            }, label: {
+                Text("Goal")
+                Text("Injected into the system prompt. Also settable with /goal.")
+            })
+
             LabeledContent(content: {
                 Slider(
                     value: compactionBinding,
@@ -108,6 +116,17 @@ struct InspectorContextTab: View {
                     names.removeAll { $0 == skillName }
                 }
                 session.alwaysEnabledSkillNames = names.isEmpty ? nil : names
+                save()
+            }
+        )
+    }
+
+    private var goalBinding: Binding<String> {
+        Binding(
+            get: { session.goal ?? "" },
+            set: { newValue in
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                session.goal = trimmed.isEmpty ? nil : trimmed
                 save()
             }
         )

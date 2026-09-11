@@ -33,7 +33,7 @@ public struct RunCommandTool: AnyTool, Sendable {
                     items: .string(),
                     description: "Arguments to pass to the command."
                 ).optional(),
-                "workingDirectory": .string(description: "The working directory for the command. Defaults to the user's home directory.").optional(),
+                "workingDirectory": .string(description: "The working directory for the command. Defaults to the session's working directory, and must be inside it when one is set.").optional(),
             ],
             required: ["command"]
         )
@@ -53,8 +53,6 @@ public struct RunCommandTool: AnyTool, Sendable {
             return .error("Invalid arguments: expected { \"command\": \"...\", \"arguments\": [...] }")
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         let fullCommand: String
         if let cmdArgs = args.arguments, !cmdArgs.isEmpty {
             let escaped = cmdArgs.map { arg in
@@ -64,16 +62,40 @@ public struct RunCommandTool: AnyTool, Sendable {
         } else {
             fullCommand = args.command
         }
-        process.arguments = ["-l", "-c", fullCommand]
 
-        // Use the explicitly provided working directory, fall back to the
-        // session-level working directory from the tool context.
-        if let workDir = args.workingDirectory {
-            let expandedPath = NSString(string: workDir).expandingTildeInPath
-            process.currentDirectoryURL = URL(fileURLWithPath: expandedPath)
-        } else if let contextDir = context.workingDirectory {
-            process.currentDirectoryURL = URL(fileURLWithPath: contextDir)
+        // A session working directory scopes the command: the directory it runs
+        // in has to stay inside it, and writes are confined to it by the kernel.
+        // Without one the command is unrestricted, as it was before scoping.
+        let scope = PathScope(workingDirectory: context.workingDirectory)
+
+        let workingDirectory: URL?
+        if let requested = args.workingDirectory {
+            if let scope {
+                guard let resolved = scope.resolve(requested) else {
+                    return .error(
+                        "Working directory is outside this session's scope (\(scope.root.path)): \(requested)"
+                    )
+                }
+                workingDirectory = resolved
+            } else {
+                workingDirectory = URL(fileURLWithPath: NSString(string: requested).expandingTildeInPath)
+            }
+        } else {
+            workingDirectory = scope?.root
         }
+
+        let process = Process()
+        if let scope {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+            process.arguments = [
+                "-p", SandboxProfile.writeConfined(to: scope.root),
+                "/bin/zsh", "-l", "-c", fullCommand,
+            ]
+        } else {
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-l", "-c", fullCommand]
+        }
+        process.currentDirectoryURL = workingDirectory
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()

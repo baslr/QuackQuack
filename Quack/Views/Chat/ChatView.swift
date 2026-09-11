@@ -32,6 +32,7 @@ struct ChatView: View {
     @State private var isDropTargeted = false
     @State private var droppedURLs: [URL] = []
     @State private var isCompacting = false
+    @State private var commandNotice: String?
 
     private var isStreamingThisSession: Bool {
         chatService.isStreaming && chatService.streamingSessionID == session.id
@@ -44,6 +45,14 @@ struct ChatView: View {
                     if isStreamingThisSession {
                         ResponseIndicatorView()
                             .padding(.vertical, 6)
+                    }
+                    if let commandNotice {
+                        Text(commandNotice)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 4)
                     }
                     TokenStatsBar(session: session)
                     ComposerView(
@@ -67,6 +76,11 @@ struct ChatView: View {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     isDropTargeted = targeted
                 }
+            }
+            .task(id: commandNotice) {
+                guard commandNotice != nil else { return }
+                try? await Task.sleep(for: .seconds(5))
+                withAnimation { commandNotice = nil }
             }
             .navigationTitle(session.title)
             .navigationSubtitle(modelSubtitle)
@@ -332,6 +346,12 @@ struct ChatView: View {
     // MARK: - Actions
 
     private func sendMessage(_ text: String, attachments: [Attachment]) {
+        // Slash commands are handled locally and never reach the model.
+        if attachments.isEmpty, let command = SlashCommand.parse(text) {
+            handle(command)
+            return
+        }
+
         let (tools, approvalPolicy) = allToolsForSession()
 
         chatService.sendMessage(
@@ -344,6 +364,27 @@ struct ChatView: View {
             tools: tools,
             approvalPolicy: approvalPolicy
         )
+    }
+
+    /// Applies a locally handled composer command and reports the result in the
+    /// notice line above the composer.
+    private func handle(_ command: SlashCommand) {
+        switch command {
+        case .setGoal(let goal):
+            session.goal = goal
+            try? modelContext.save()
+            commandNotice = "Goal set: \(goal)"
+        case .clearGoal:
+            session.goal = nil
+            try? modelContext.save()
+            commandNotice = "Goal cleared."
+        case .showGoal:
+            if let goal = session.goal, !goal.isEmpty {
+                commandNotice = "Goal: \(goal)"
+            } else {
+                commandNotice = "No goal set. Use /goal <text> to set one."
+            }
+        }
     }
 
     private func resubmitMessage(_ message: ChatMessageRecord) {

@@ -64,6 +64,10 @@ public final class ChatSession {
     /// as their base directory, and the LLM will be informed of the project context.
     public var workingDirectory: String?
 
+    /// Optional goal for this session, set via the `/goal` composer command.
+    /// When set, it is injected into the system prompt on every request.
+    public var goal: String?
+
     /// The provider profile UUID for this session, if overridden.
     public var providerID: UUID? {
         get {

@@ -28,7 +28,7 @@ public struct WriteFileTool: AnyTool, Sendable {
     public var parametersSchema: JSONSchema {
         .object(
             properties: [
-                "path": .string(description: "The absolute path to the file to write."),
+                "path": .string(description: "The path to the file to write. Relative paths resolve against the session's working directory, and the path must be inside it when one is set."),
                 "content": .string(description: "The content to write to the file."),
             ],
             required: ["path", "content"]
@@ -48,14 +48,18 @@ public struct WriteFileTool: AnyTool, Sendable {
             return .error("Invalid arguments: expected { \"path\": \"...\", \"content\": \"...\" }")
         }
 
-        let expandedPath = NSString(string: args.path).expandingTildeInPath
+        // A session working directory scopes the tool; without one the path is
+        // unrestricted, as it was before scoping.
         let url: URL
-        if expandedPath.hasPrefix("/") {
-            url = URL(fileURLWithPath: expandedPath)
-        } else if let workDir = context.workingDirectory {
-            url = URL(fileURLWithPath: workDir).appendingPathComponent(expandedPath)
+        if let scope = PathScope(workingDirectory: context.workingDirectory) {
+            guard let resolved = scope.resolve(args.path) else {
+                return .error(
+                    "Path is outside this session's scope (\(scope.root.path)): \(args.path)"
+                )
+            }
+            url = resolved
         } else {
-            url = URL(fileURLWithPath: expandedPath)
+            url = URL(fileURLWithPath: NSString(string: args.path).expandingTildeInPath)
         }
 
         // Ensure the parent directory exists
