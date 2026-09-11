@@ -398,6 +398,10 @@ public final class ChatService: ChatServiceProtocol {
     private func handleApprovalRequest(_ request: ToolApprovalRequest) {
         // Update the tool call state to pendingApproval
         if let index = activeToolCalls.firstIndex(where: { $0.id == request.toolCallId }) {
+            // Keep the arguments on the call itself, not only in the state:
+            // approving flips the state back to `.running` and would otherwise
+            // discard the only early copy of what the tool was invoked with.
+            activeToolCalls[index].arguments = request.arguments
             activeToolCalls[index].state = .pendingApproval(
                 arguments: request.arguments,
                 description: request.toolDescription
@@ -745,25 +749,40 @@ public final class ChatService: ChatServiceProtocol {
             // denyToolCall(id:) called from the UI. No additional action needed.
             break
 
+        case .iterationCompleted(_, _, let history):
+            // Backfill arguments after every tool round rather than only at the
+            // end of the turn, so each call shows what it was invoked with as
+            // soon as its round closes.
+            attachToolCallArguments(from: history)
+
         case .finished(let usage, _, _, let history):
             streamedInputTokens = usage.input
             streamedOutputTokens = usage.output
             streamedReasoningTokens = usage.reasoning
             finishedHistory = history
-            // Extract tool call arguments from the finished history.
-            // The history contains AssistantMessages with ToolCalls that have arguments.
-            for message in history {
-                if case .assistant(let assistantMsg) = message {
-                    for toolCall in assistantMsg.toolCalls {
-                        if let index = activeToolCalls.firstIndex(where: { $0.id == toolCall.id }) {
-                            activeToolCalls[index].arguments = toolCall.arguments
-                        }
-                    }
-                }
-            }
+            attachToolCallArguments(from: history)
 
         default:
             break
+        }
+    }
+
+    /// Copies tool call arguments out of a message history onto the matching
+    /// active tool calls.
+    ///
+    /// AgentRunKit's `toolCallStarted` event carries only a name and an id, so
+    /// the arguments a call was invoked with are not available while it runs.
+    /// The history attached to `iterationCompleted` and `finished` is the
+    /// earliest place they appear.
+    private func attachToolCallArguments(from history: [ChatMessage]) {
+        for message in history {
+            guard case .assistant(let assistantMsg) = message else { continue }
+            for toolCall in assistantMsg.toolCalls {
+                if let index = activeToolCalls.firstIndex(where: { $0.id == toolCall.id }),
+                   activeToolCalls[index].arguments == nil {
+                    activeToolCalls[index].arguments = toolCall.arguments
+                }
+            }
         }
     }
 
