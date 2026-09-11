@@ -125,9 +125,11 @@ enum TextGenerationService {
 
     /// Generate a structured summary of a conversation for context compaction.
     ///
-    /// Uses the on-device Foundation Model to produce a summary that preserves
-    /// key decisions, task state, file paths, and constraints. Falls back to
-    /// a bullet-point extraction of user messages when the model is unavailable.
+    /// Uses the on-device Foundation Model to produce a handoff summary for the
+    /// model that resumes the conversation: progress and decisions so far, the
+    /// context and constraints that still apply, the remaining next steps, and
+    /// any data needed to continue. Falls back to a bullet-point extraction of
+    /// user messages when the model is unavailable.
     @MainActor
     static func generateConversationSummary(
         messages: [(role: String, content: String)]
@@ -144,12 +146,13 @@ enum TextGenerationService {
 
         do {
             let session = LanguageModelSession(instructions: """
-                Summarize the following conversation for context continuity. \
-                Preserve: key decisions made, current task state, file paths \
-                and code references mentioned, constraints and requirements \
-                established, and any unresolved questions. Be concise but \
-                thorough. Use bullet points. Respond with only the summary, \
-                no preamble.
+                You are writing a handoff note for the model that takes over \
+                this conversation. Cover, in this order: what has been done \
+                and what was decided; the context, constraints and stated \
+                preferences that still apply; what is left to do, as concrete \
+                next steps; and any data, examples or references the \
+                successor cannot continue without. Keep it structured, and \
+                short enough to be read in full. Respond with only the note.
                 """)
             let response = try await session.respond(to: truncated)
             let summary = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
