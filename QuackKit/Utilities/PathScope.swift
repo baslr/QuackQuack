@@ -19,7 +19,7 @@ import Foundation
 /// Paths reaching the built-in tools are chosen by the model, so `..`, a
 /// symlink, or a plain absolute path can all point outside the directory the
 /// user scoped the session to. ``resolve(_:)`` rejects those.
-struct PathScope: Sendable {
+nonisolated struct PathScope: Sendable {
     /// The canonical root every resolved path must stay inside.
     let root: URL
 
