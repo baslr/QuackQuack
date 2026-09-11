@@ -36,7 +36,7 @@ jobs:
       - name: Cache SPM packages
         uses: actions/cache@v4
         with:
-          path: ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          path: build/SourcePackages
           key: spm-${{ runner.os }}-${{ hashFiles('Quack.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: spm-${{ runner.os }}-
 
@@ -46,7 +46,9 @@ jobs:
             -scheme Quack \
             -destination 'platform=macOS' \
             -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
             clean build
 
       - name: Test
@@ -55,5 +57,22 @@ jobs:
             -scheme QuackKitTests \
             -destination 'platform=macOS' \
             -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
             test
+
+      # ditto preserves the bundle's symlinks and permissions; letting
+      # upload-artifact zip the .app directory itself does not.
+      - name: Package app
+        run: |
+          ditto -c -k --keepParent \
+            build/Build/Products/Debug/Quack.app \
+            Quack-debug.zip
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quack-debug
+          path: Quack-debug.zip
+          retention-days: 14
