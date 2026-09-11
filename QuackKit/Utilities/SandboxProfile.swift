@@ -15,7 +15,7 @@
 import Foundation
 
 /// Builds Seatbelt profiles for `sandbox-exec`.
-enum SandboxProfile {
+nonisolated enum SandboxProfile {
     /// A profile that confines file writes to `root` and its subdirectories.
     ///
     /// Reads stay open by design. A `(deny default)` profile has to enumerate
