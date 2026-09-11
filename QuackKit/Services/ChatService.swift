@@ -109,7 +109,8 @@ public final class ChatService: ChatServiceProtocol {
     /// 3. **Skills** — via ``SkillServiceProtocol/composedSystemPrompt(basePrompt:alwaysEnabledSkillNames:)``.
     /// 4. **Instruction files** — project-level AGENTS.md/CLAUDE.md discovered
     ///    by walking up from the working directory.
-    /// 5. **Environment block** — working directory, git status, platform, date.
+    /// 5. **Session goal** — the goal set via the `/goal` command (if any).
+    /// 6. **Environment block** — working directory, git status, platform, date.
     ///
     /// This replaces the duplicated prompt assembly that previously existed in
     /// both ``sendMessage(_:in:modelContext:providerService:profiles:tools:)``
@@ -147,7 +148,13 @@ public final class ChatService: ChatServiceProtocol {
             systemPrompt += "\n\n" + instructions
         }
 
-        // Layer 5: Environment block
+        // Layer 5: Session goal (set via the /goal command)
+        if let goal = session.goal?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !goal.isEmpty {
+            systemPrompt += "\n\nThe user's goal for this session:\n\(goal)"
+        }
+
+        // Layer 6: Environment block
         let envBlock = buildEnvironmentBlock(workingDirectory: session.workingDirectory)
         systemPrompt += envBlock
 
