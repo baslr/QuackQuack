@@ -113,10 +113,19 @@ struct ToolCallView: View {
                         .font(.callout.monospaced())
                         .foregroundStyle(.primary)
 
+                    if let invocation {
+                        Text(invocation)
+                            .font(.callout.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .layoutPriority(1)
+                    }
+
                     if let summary = toolCall.summary, !isExpanded {
                         Text(summary)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.tertiary)
                             .lineLimit(1)
                             .transition(.opacity)
                     }
@@ -258,6 +267,33 @@ struct ToolCallView: View {
             .padding(6)
             .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 6))
         }
+    }
+
+    /// A one-line rendering of what the tool was actually invoked with.
+    ///
+    /// Derived from the streamed arguments rather than from the generated
+    /// summary, so it appears as soon as the call starts instead of after the
+    /// on-device model has described it. Returns `nil` while the arguments are
+    /// still arriving and are not yet parseable.
+    private var invocation: String? {
+        guard let arguments = toolCall.arguments,
+              let data = arguments.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+
+        // Shell commands read best as the command line that was run.
+        if let command = object["command"] as? String, !command.isEmpty {
+            let tail = (object["arguments"] as? [String])?.joined(separator: " ") ?? ""
+            return tail.isEmpty ? command : "\(command) \(tail)"
+        }
+
+        // Everything else is identified by its single most telling argument.
+        for key in ["path", "url", "query", "name"] {
+            if let value = object[key] as? String, !value.isEmpty {
+                return value
+            }
+        }
+        return nil
     }
 
     private var iconName: String {
